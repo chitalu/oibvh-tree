@@ -4,6 +4,10 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#if defined(USE_OPENGL)
+#include "oibvh_draw.h"
+#endif
+
 void print_help()
 {
     printf(
@@ -20,7 +24,7 @@ void print_help()
 }
 
 template <typename T>
-void run(const input_params_t& input)
+void run(params_t& input)
 {
     T impl(input);
 
@@ -34,7 +38,7 @@ void run(const input_params_t& input)
     impl.teardown();
 }
 
-void parse_args(input_params_t& input, int argc, const char* argv[])
+void parse_args(params_t& params, int argc, const char* argv[])
 {
     for (int i = 1; i < argc; ++i) {
         const char* arg_name = argv[i];
@@ -55,18 +59,18 @@ void parse_args(input_params_t& input, int argc, const char* argv[])
             printf("%s\n", info.c_str());
             std::exit(0);
         } else if (!std::strcmp("--mesh", argv[i])) {
-            input.input_mesh_fpath = argv[++i];
+            params.input_mesh_fpath = argv[++i];
         } else if (!std::strcmp("--groupsize", argv[i])) {
             int groupsize = std::atoi(argv[++i]);
             if (groupsize > 10 || groupsize < 2) {
                 fprintf(stderr, "error: argument `--groupsize` only accepts the values 2..10\n");
                 std::exit(1);
             }
-            input.gpu_threadgroup_size = (1 << groupsize);
+            params.gpu_threadgroup_size = (1 << groupsize);
         } else if (!std::strcmp("--src_dir", argv[i])) {
-            input.source_files_dir = argv[++i];
+            params.source_files_dir = argv[++i];
         } else if (!std::strcmp("--single_kernel", argv[i])) {
-            input.single_kernel_mode = true;
+            params.single_kernel_mode = true;
         }
     }
 
@@ -74,7 +78,7 @@ void parse_args(input_params_t& input, int argc, const char* argv[])
     // input error checking
     //
 
-    if (input.input_mesh_fpath.empty()) {
+    if (params.input_mesh_fpath.empty()) {
         std::fprintf(stderr, "error: input mesh file not given\n");
         std::exit(1);
     }
@@ -84,12 +88,12 @@ void parse_args(input_params_t& input, int argc, const char* argv[])
     //
 
     printf("\n--parameters--\n");
-    printf("platform idx %d\n", input.platform_idx);
-    printf("device idx %d\n", input.device_idx);
-    printf("thread group size %d\n", input.gpu_threadgroup_size);
-    printf("single kernel mode %s\n", input.single_kernel_mode ? "true" : "false");
-    printf("input mesh path %s\n", input.input_mesh_fpath.c_str());
-    printf("source files dir %s\n", input.source_files_dir.c_str());
+    printf("platform idx %d\n", params.platform_idx);
+    printf("device idx %d\n", params.device_idx);
+    printf("thread group size %d\n", params.gpu_threadgroup_size);
+    printf("single kernel mode %s\n", params.single_kernel_mode ? "true" : "false");
+    printf("input mesh path %s\n", params.input_mesh_fpath.c_str());
+    printf("source files dir %s\n", params.source_files_dir.c_str());
 }
 
 void load_mesh_data(mesh_t &mesh, const std::string& fpath)
@@ -184,16 +188,16 @@ int main(int argc, const char* argv[])
     // report version
     printf("%s version %d.%d (%s)\n", argv[0], oibvh_VERSION_MAJOR, oibvh_VERSION_MINOR, USE_OPENCL_STRING);
 
-    input_params_t input;
+    params_t params;
 
-    parse_args(input, argc, argv);
+    parse_args(params, argc, argv);
 
-    load_mesh_data(input.mesh, input.input_mesh_fpath);
+    load_mesh_data(params.mesh, params.input_mesh_fpath);
 
 #ifdef USE_OPENCL
-    const std::string info = oibvh_opencl::get_info(input.platform_idx, input.device_idx);
+    const std::string info = oibvh_opencl::get_info(params.platform_idx, params.device_idx);
     printf("\n%s\n", info.c_str());
-    run<oibvh_opencl>(input);
+    run<oibvh_opencl>(params);
 #else
 #ifdef USE_CUDA
 
@@ -202,10 +206,10 @@ int main(int argc, const char* argv[])
 #endif
 #endif
 
-#if ENABLE_OPENGL
-    if (bd.rendering_enabled()) {
-        visualise(bd);
-    }
+#if defined(USE_OPENGL)
+    
+    oibvh_draw(params);
+    
 #endif
     return 0;
 }

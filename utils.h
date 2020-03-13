@@ -21,15 +21,17 @@ struct mesh_t {
     bounding_box_t m_aabb;
 };
 
-struct input_params_t {
+struct params_t {
     int platform_idx = 0;
     int device_idx = 0;
     int gpu_threadgroup_size = 4; // i.e. must be a power of 2
     bool single_kernel_mode = false;
     std::string input_mesh_fpath;
-    std::string source_files_dir = "../";
+    std::string source_files_dir = "..";
 
     mesh_t mesh;
+
+    std::vector<bounding_box_t> bvh; // output
 };
 
 struct oibvh_constr_params_t {
@@ -40,6 +42,8 @@ struct oibvh_constr_params_t {
 
 static std::string read_text_file(const std::string& fpath)
 {
+    printf("read: %s\n", fpath.c_str());
+
     std::ifstream file(fpath.c_str());
 
     if (!file.is_open()) {

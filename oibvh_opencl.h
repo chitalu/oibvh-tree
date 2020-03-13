@@ -5,8 +5,8 @@
 
 class oibvh_impl {
 public:
-    oibvh_impl(const input_params_t& controls)
-        : m_input(controls)
+    oibvh_impl(params_t& controls)
+        : m_params(controls)
     {
     }
     oibvh_impl() = delete;
@@ -16,7 +16,7 @@ public:
     virtual void build_bvh() = 0;
 
 protected:
-    const input_params_t& m_input;
+    params_t& m_params;
 };
 
 #if defined(USE_OPENCL)
@@ -27,7 +27,7 @@ extern void check_error(int err, const char* msg);
 
 class oibvh_opencl : public oibvh_impl {
 public:
-    oibvh_opencl(const input_params_t& mesh);
+    oibvh_opencl(params_t& mesh);
     oibvh_opencl() = delete;
     void setup();
     void teardown();

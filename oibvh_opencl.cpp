@@ -116,7 +116,7 @@ std::pair<cl_platform_id, cl_device_id> oibvh_opencl::get_platform_device(const 
     return platform_device;
 }
 
-oibvh_opencl::oibvh_opencl(const input_params_t& input)
+oibvh_opencl::oibvh_opencl( params_t& input)
     : oibvh_impl(input)
 {
 }
@@ -131,7 +131,7 @@ void oibvh_opencl::setup()
 
     printf("\n--init compute device--\n");
 
-    std::pair<cl_platform_id, cl_device_id> pd = get_platform_device(m_input.platform_idx, m_input.device_idx);
+    std::pair<cl_platform_id, cl_device_id> pd = get_platform_device(m_params.platform_idx, m_params.device_idx);
     m_platform = pd.first;
     m_device = pd.second;
 
@@ -148,7 +148,7 @@ void oibvh_opencl::setup()
 
     printf("CL_DEVICE_MAX_WORK_GROUP_SIZE=%zu\n", m_gpu_workgroup_size_max);
 
-    if (m_input.gpu_threadgroup_size > m_gpu_workgroup_size_max) {
+    if (m_params.gpu_threadgroup_size > m_gpu_workgroup_size_max) {
         fprintf(stderr, "error: specified GPU threadgroup size is too large.\n");
         std::exit(1);
     }
@@ -158,7 +158,7 @@ void oibvh_opencl::setup()
     check_error(err, "clGetDeviceInfo LOCAL_MEM_SIZE");
     printf("CL_DEVICE_LOCAL_MEM_SIZE=%zu\n", gpu_local_mem_max);
 
-    const int subtree_leaf_count_max = m_input.gpu_threadgroup_size;
+    const int subtree_leaf_count_max = m_params.gpu_threadgroup_size;
     const int subtree_size_max = ((subtree_leaf_count_max * 2) - 1);
     const std::size_t local_mem_size_needed = subtree_size_max * sizeof(bounding_box_t);
 
@@ -178,18 +178,18 @@ void oibvh_opencl::setup()
 
     printf("\n--build program--\n");
 
-    const int triangle_count = m_input.mesh.triangles.size() / 3;
+    const int triangle_count = m_params.mesh.triangles.size() / 3;
 
     std::string opencl_compiler_flags;
-    opencl_compiler_flags += " -I " + m_input.source_files_dir;
+    opencl_compiler_flags += " -I " + m_params.source_files_dir;
     opencl_compiler_flags += " -DSUBTREE_SIZE_MAX=" + std::to_string(subtree_size_max);
     opencl_compiler_flags += " -DTRIANGLE_COUNT=" + std::to_string(triangle_count);
 
-    if (m_input.single_kernel_mode == true) {
+    if (m_params.single_kernel_mode == true) {
         opencl_compiler_flags += " -DUSE_SINGLE_KERNEL_MODE=1";
     }
 
-    load_and_build_program(m_program, m_device, m_input.source_files_dir + "/kernel.cl.c", opencl_compiler_flags);
+    load_and_build_program(m_program, m_device, m_params.source_files_dir + "/kernel.cl.c", opencl_compiler_flags);
 
     //
     // create kernels
@@ -222,13 +222,13 @@ void oibvh_opencl::setup()
     // buffer of atomic counters
     int buffer_capacity = 1;
     
-    if (m_input.single_kernel_mode == true) {
+    if (m_params.single_kernel_mode == true) {
         // calculate the total size of internal node global atomic counters
         // (dependant on highest-aggregated level during subtree construction)
         const int np2 = next_power_of_two(triangle_count);
         const int tLeafLev = ilog2(np2);
         const int tPenultimateLev = tLeafLev - 1;
-        const int stHeight = ilog2(m_input.gpu_threadgroup_size) + 1;
+        const int stHeight = ilog2(m_params.gpu_threadgroup_size) + 1;
         // highest tree level updated using only shared memory (subtree) synchronisation
         const int tAggregationLevelIdMin = ((tPenultimateLev + 1) - stHeight);
 
@@ -426,7 +426,7 @@ std::vector<oibvh_constr_params_t> get_kernel_scheduling_params(
 void oibvh_opencl::build_bvh()
 {
     cl_int err = CL_SUCCESS;
-    const int triangle_count = m_input.mesh.triangles.size() / 3;
+    const int triangle_count = m_params.mesh.triangles.size() / 3;
     const int oibvh_node_count = oibvh_get_size(triangle_count);
     const int oibvh_internal_node_count = oibvh_node_count - triangle_count;
 
@@ -437,9 +437,9 @@ void oibvh_opencl::build_bvh()
     std::vector<morton_pair_t> morton_pairs;
 
     morton_pairs.resize(triangle_count);
-    m_bvh_aabbs.resize(oibvh_node_count);
+    m_params.bvh.resize(oibvh_node_count);
 
-    create_morton_codes_and_leaf_aabbs(morton_pairs.data(), m_bvh_aabbs.data() + oibvh_internal_node_count, m_input.mesh);
+    create_morton_codes_and_leaf_aabbs(morton_pairs.data(), m_params.bvh.data() + oibvh_internal_node_count, m_params.mesh);
 
     //
     // write leaf bounding boxes to GPU buffer
@@ -448,7 +448,7 @@ void oibvh_opencl::build_bvh()
     check_error(err, "clEnqueueMapBuffer (m_buffer_aabb)");
     {
         memcpy(reinterpret_cast<void*>(buffer_aabb_ptr),
-            reinterpret_cast<void*>(m_bvh_aabbs.data() + oibvh_internal_node_count),
+            reinterpret_cast<void*>(m_params.bvh.data() + oibvh_internal_node_count),
             triangle_count * sizeof(bounding_box_t));
     }
     err = clEnqueueUnmapMemObject(m_queue, m_buffer_aabb, buffer_aabb_ptr, 0, nullptr, nullptr);
@@ -523,8 +523,8 @@ void oibvh_opencl::build_bvh()
     const int virtualLeafCount = next_power_of_two(triangle_count) - triangle_count;
     int entryLevelSize = oibvh_level_real_node_count(entryLevel, tLeafLev, virtualLeafCount);
 
-    std::vector<oibvh_constr_params_t> params = get_kernel_scheduling_params(m_input.gpu_threadgroup_size, entryLevelSize);
-    const int kernelCount = (m_input.single_kernel_mode ? 1 : params.size());
+    std::vector<oibvh_constr_params_t> params = get_kernel_scheduling_params(m_params.gpu_threadgroup_size, entryLevelSize);
+    const int kernelCount = (m_params.single_kernel_mode ? 1 : params.size());
 
     //
     // run construction kernel(s)
@@ -566,7 +566,7 @@ void oibvh_opencl::build_bvh()
             printf("\ttime: %0.1f microseconds\n", (time_end - time_start) / 1.0e3);
         }
 
-        if (m_input.single_kernel_mode == true) {
+        if (m_params.single_kernel_mode == true) {
             break; // done
         }
 
@@ -588,14 +588,14 @@ void oibvh_opencl::build_bvh()
     check_error(err, "clEnqueueMapBuffer (m_buffer_triangles_sorted)");
     {
         // copy
-        memcpy(reinterpret_cast<void*>(m_bvh_aabbs.data()),
+        memcpy(reinterpret_cast<void*>(m_params.bvh.data()),
             reinterpret_cast<void*>(buffer_aabb_ptr),
             oibvh_internal_node_count * sizeof(bounding_box_t));
 
         // verify that we did not modify the leaf nodes segment
         for (int i = 0; i < triangle_count; ++i) {
 
-            const bounding_box_t* a = (m_bvh_aabbs.data() + oibvh_internal_node_count + i);
+            const bounding_box_t* a = (m_params.bvh.data() + oibvh_internal_node_count + i);
             const bounding_box_t* b = (buffer_aabb_ptr + oibvh_internal_node_count + i);
             const float* ptr_a = reinterpret_cast<const float*>(a);
             const float* ptr_b = reinterpret_cast<const float*>(b);
@@ -618,8 +618,8 @@ void oibvh_opencl::build_bvh()
     //
     // check that the size of the root aabb is same as mesh bounding box
     //
-    const bounding_box_t* a = m_bvh_aabbs.data();
-    const bounding_box_t* b = &m_input.mesh.m_aabb;
+    const bounding_box_t* a = m_params.bvh.data();
+    const bounding_box_t* b = &m_params.mesh.m_aabb;
     const float* ptr_a = reinterpret_cast<const float*>(a);
     const float* ptr_b = reinterpret_cast<const float*>(b);
 

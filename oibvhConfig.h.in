@@ -2,4 +2,7 @@
 #define oibvh_VERSION_MAJOR @oibvh_VERSION_MAJOR@
 #define oibvh_VERSION_MINOR @oibvh_VERSION_MINOR@
 #cmakedefine USE_OPENCL
-#cmakedefine USE_OPENCL_STRING "@USE_OPENCL_STRING@"
+#cmakedefine USE_OPENCL_STRING "@USE_OPENGL_STRING@"
+
+#cmakedefine USE_OPENGL
+#cmakedefine USE_OPENGL_STRING "@USE_OPENGL_STRING@"
