@@ -136,7 +136,7 @@ __kernel void oibvh_construction(
                 const int leftChildMemIndex = oibvh_node_implicit_idx_to_mem_idx(leftChild, tLeafLev, tVirtualLeafCount);
 
                 // left node BV
-                nodeBV = bvhMem[leftChildMemIndex]; 
+                nodeBV = bvhMem[leftChildMemIndex];
 
                 const int rightChild = (curNode * 2) + 2;
                 const bool rightChildIsReal = (rightChild <= childLevRightmostRealNode);
@@ -275,7 +275,7 @@ __kernel void oibvh_construction(
             }
 
             const int tLevRightmostRealNode = oibvh_level_rightmost_real_node(tLev, tLeafLev, tVirtualLeafCount);
-            const int curNodeMemIndex = tBaseOffsetAOS + oibvh_node_implicit_idx_to_mem_idx(curNode, tLeafLev, tVirtualLeafCount);
+            const int curNodeMemIndex = oibvh_node_implicit_idx_to_mem_idx(curNode, tLeafLev, tVirtualLeafCount);
 
             // commit node to global mem buffer (atomics are needed to ensure memory
             // consistency)

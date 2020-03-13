@@ -1,8 +1,8 @@
 #include "utils.h"
 
 #include "oibvh_opencl.h"
-#include <vector>
 #include <cstring>
+#include <vector>
 
 template <typename T, typename clInfoFunc, typename cl_obj_type, typename cl_obj_info_type>
 std::vector<T> get_opencl_info(clInfoFunc F, cl_obj_type obj, cl_obj_info_type _what)
@@ -162,7 +162,7 @@ void oibvh_opencl::setup()
     const int subtree_size_max = ((subtree_leaf_count_max * 2) - 1);
     const std::size_t local_mem_size_needed = subtree_size_max * sizeof(bounding_box_t);
 
-    printf("scratchpad memory used: %fKb\n", local_mem_size_needed / 1.0e6 );
+    printf("scratchpad memory used: %fKb\n", local_mem_size_needed / 1.0e6);
 
     if (local_mem_size_needed > gpu_local_mem_max) {
         fprintf(stderr, "error: insufficient local memory for the given GPU threadgroup size.\n");
@@ -178,17 +178,17 @@ void oibvh_opencl::setup()
 
     printf("\n--build program--\n");
 
-    const int triangle_count = m_input.mesh.triangles.size()/3;
+    const int triangle_count = m_input.mesh.triangles.size() / 3;
 
     std::string opencl_compiler_flags;
     opencl_compiler_flags += " -I " + m_input.source_files_dir;
     opencl_compiler_flags += " -DSUBTREE_SIZE_MAX=" + std::to_string(subtree_size_max);
-    opencl_compiler_flags += " -DTRIANGLE_COUNT=" + std::to_string(triangle_count); 
-    
-    if(m_input.single_kernel_mode == true){
+    opencl_compiler_flags += " -DTRIANGLE_COUNT=" + std::to_string(triangle_count);
+
+    if (m_input.single_kernel_mode == true) {
         opencl_compiler_flags += " -DUSE_SINGLE_KERNEL_MODE=1";
     }
-    
+
     load_and_build_program(m_program, m_device, m_input.source_files_dir + "/kernel.cl.c", opencl_compiler_flags);
 
     //
@@ -221,23 +221,33 @@ void oibvh_opencl::setup()
 
     // buffer of atomic counters
     int buffer_capacity = 1;
-    // TODO: test this
+    
     if (m_input.single_kernel_mode == true) {
         // calculate the total size of internal node global atomic counters
         // (dependant on highest-aggregated level during subtree construction)
         const int np2 = next_power_of_two(triangle_count);
         const int tLeafLev = ilog2(np2);
         const int tPenultimateLev = tLeafLev - 1;
-        const int stAggregationLevs = ilog2(m_input.gpu_threadgroup_size) + 1;
-        const int stAggregationHighestLev = ((tPenultimateLev + 1) - stAggregationLevs);
-        const int& tAggregationHighestLev = stAggregationHighestLev;
+        const int stHeight = ilog2(m_input.gpu_threadgroup_size) + 1;
+        // highest tree level updated using only shared memory (subtree) synchronisation
+        const int tAggregationLevelIdMin = ((tPenultimateLev + 1) - stHeight);
 
-        const int tVirtualLeafCount = next_power_of_two(triangle_count) - triangle_count;
-        const int tAggregationHighestLevRightmostRealNode = oibvh_level_rightmost_real_node(tAggregationHighestLev, tLeafLev, tVirtualLeafCount);
-        const int tAggregationHighestLevLeftmostNode = get_level_leftmost_node(tAggregationHighestLev);
+        if (tAggregationLevelIdMin != 0) {
+            // first tree level which is aggregated using global atomics
+            const int tAggregationLevelIdMax = tAggregationLevelIdMin - 1;
 
-        const int tAggregationHighestLevNodeCount = (tAggregationHighestLevRightmostRealNode - tAggregationHighestLevLeftmostNode) + 1;
-        buffer_capacity = oibvh_get_size(tAggregationHighestLevNodeCount);
+            const int tVirtualLeafCount = next_power_of_two(triangle_count) - triangle_count;
+
+            const int rightmostRealNode = oibvh_level_rightmost_real_node(tAggregationLevelIdMax, tLeafLev, tVirtualLeafCount);
+            const int leftmostNode = get_level_leftmost_node(tAggregationLevelIdMax);
+            const int realSize = (rightmostRealNode - leftmostNode) + 1;
+
+            // exact number of integers needed to have a unique atomic lock for
+            // each internal node that must be aggregated without shared memory synchronisation
+            buffer_capacity = oibvh_get_size(realSize);
+        }
+
+        printf("single-kernel atomic counters: %d\n", buffer_capacity);
     }
 
     m_buffer_atomic_counters = clCreateBuffer(m_context, CL_MEM_READ_WRITE, buffer_capacity * sizeof(cl_int), nullptr, &err);
@@ -291,7 +301,7 @@ void create_morton_codes_and_leaf_aabbs(morton_pair_t* morton_pairs, bounding_bo
     const bounding_box_t& mesh_aabb = mesh.m_aabb;
     size_t index_offset = 0;
 
-    for (size_t triangle_idx = 0; triangle_idx < mesh.triangles.size()/3; triangle_idx++) {
+    for (size_t triangle_idx = 0; triangle_idx < mesh.triangles.size() / 3; triangle_idx++) {
 
         //
         // triangle vertices
@@ -416,7 +426,7 @@ std::vector<oibvh_constr_params_t> get_kernel_scheduling_params(
 void oibvh_opencl::build_bvh()
 {
     cl_int err = CL_SUCCESS;
-    const int triangle_count = m_input.mesh.triangles.size()/3;
+    const int triangle_count = m_input.mesh.triangles.size() / 3;
     const int oibvh_node_count = oibvh_get_size(triangle_count);
     const int oibvh_internal_node_count = oibvh_node_count - triangle_count;
 
@@ -531,7 +541,7 @@ void oibvh_opencl::build_bvh()
 
         printf("\ttotal threads %zu\n", globalWorkSize);
         printf("\tgroup size %zu\n", localWorkSize);
-        printf("\tgroup count %zu\n", globalWorkSize/localWorkSize);
+        printf("\tgroup count %zu\n", globalWorkSize / localWorkSize);
 
         err = clSetKernelArg(m_kernel_build_oibvh, 3, sizeof(cl_int), static_cast<const void*>(&entryLevel));
         check_error(err, "clSetKernelArg (3)");
