@@ -41,7 +41,7 @@ if(USE_OPENGL)
   find_package(OpenGL REQUIRED)
   list(APPEND EXTRA_LIBS OpenGL::GL)
 
-  find_package(glfw3 3.3 REQUIRED)
+  find_package(glfw3 REQUIRED)
 
   list(APPEND EXTRA_INCLUDES ${GLFW_INCLUDE_DIRS})
   list(APPEND EXTRA_LIBS glfw)
