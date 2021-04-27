@@ -5,7 +5,7 @@ Basic reference implementation of parallel construction of a binary ostensibly-i
 ## dependancies
 
 * cmake 3.10
-* OpenCL or CUDA drivers
+* OpenCL drivers
 
 If you want to visualise BVH, then you also need  
 
@@ -19,5 +19,4 @@ If you want to visualise BVH, then you also need
 3. `cmake ..`
   * Options
     - `-DUSE_OPENCL=ON` to build with opencl
-    - `-DUSE_CUDA=ON` to build with cuda
     - `-DUSE_OPENGL=ON` to enable visualisation (optional)
